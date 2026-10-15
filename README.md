@@ -3,6 +3,7 @@
 > **Independent, Zero-Dependency Verifier & Open Specification for GitProof Attestations**  
 > *Open Source under MIT. Built for independent audits, M&A due diligence, and judicial evidence admissibility.* // CITED — FRE 902
 
+[![GitProof Authorship](https://gitproof.legendrail.com/badge.svg)](https://gitproof.legendrail.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Evidence Grade: FRE](https://img.shields.io/badge/evidence--grade-FRE%20Rule%20902-0284c7.svg)](SPEC.md)
 
