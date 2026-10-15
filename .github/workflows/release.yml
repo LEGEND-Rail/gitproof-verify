@@ -1,0 +1,70 @@
+name: Release Verifier
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Multi-Arch & Publish Release
+    runs-on: [self-hosted, legend-ci]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Multi-Arch Binaries & Archives
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          [ -z "${TAG_NAME}" ] && TAG_NAME="${{ github.event.inputs.tag }}"
+          [ -z "${TAG_NAME}" ] && TAG_NAME="v0.1.0"
+          
+          COMMIT_HASH="$(git rev-parse --short HEAD)"
+          LDFLAGS="-s -w -X main.Version=${TAG_NAME} -X main.GitCommit=${COMMIT_HASH}"
+          
+          DIST_DIR="dist"
+          rm -rf "${DIST_DIR}"
+          mkdir -p "${DIST_DIR}"
+          
+          echo "⚙️ Compiling Darwin (arm64 & amd64)..."
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "${DIST_DIR}/gproof-verify-darwin-arm64" ./cmd/gproof-verify
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "${DIST_DIR}/gproof-verify-darwin-amd64" ./cmd/gproof-verify
+          
+          echo "⚙️ Compiling Linux (amd64 & arm64)..."
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "${DIST_DIR}/gproof-verify-linux-amd64" ./cmd/gproof-verify
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "${DIST_DIR}/gproof-verify-linux-arm64" ./cmd/gproof-verify
+          
+          echo "⚙️ Compiling Windows (amd64)..."
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o "${DIST_DIR}/gproof-verify-windows-amd64.exe" ./cmd/gproof-verify
+          
+          echo "📦 Packaging archives..."
+          tar -czf "${DIST_DIR}/gproof-verify-darwin-arm64.tar.gz" -C "${DIST_DIR}" gproof-verify-darwin-arm64
+          tar -czf "${DIST_DIR}/gproof-verify-darwin-amd64.tar.gz" -C "${DIST_DIR}" gproof-verify-darwin-amd64
+          tar -czf "${DIST_DIR}/gproof-verify-linux-amd64.tar.gz" -C "${DIST_DIR}" gproof-verify-linux-amd64
+          tar -czf "${DIST_DIR}/gproof-verify-linux-arm64.tar.gz" -C "${DIST_DIR}" gproof-verify-linux-arm64
+          (cd "${DIST_DIR}" && zip -q gproof-verify-windows-amd64.zip gproof-verify-windows-amd64.exe)
+          
+          echo "🔐 Generating SHA-256 Checksums..."
+          (cd "${DIST_DIR}" && sha256sum gproof-verify-* > SHA256SUMS.txt)
+          cat "${DIST_DIR}/SHA256SUMS.txt"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
