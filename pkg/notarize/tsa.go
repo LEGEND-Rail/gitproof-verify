@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -156,6 +157,28 @@ func Verify(token, payload []byte) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return ts.Time.UTC(), nil
+}
+
+// VerifyTSAAtGenTime validates the embedded TSA signer certificate chain
+// against the exact second the RFC 3161 token was minted (point-in-time LTV),
+// preventing false failures 5-10 years later when the TSA leaf cert expires.
+func VerifyTSAAtGenTime(signerCert *x509.Certificate, intermediates []*x509.Certificate, roots *x509.CertPool, genTime time.Time) error {
+	interPool := x509.NewCertPool()
+	for _, ic := range intermediates {
+		interPool.AddCert(ic)
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: interPool,
+		CurrentTime:   genTime.UTC(), // Critical: verify validity at time of signing, not time.Now()
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
+	}
+
+	if _, err := signerCert.Verify(opts); err != nil {
+		return fmt.Errorf("TSA certificate chain invalid at genTime (%s): %w", genTime.UTC().Format(time.RFC3339), err)
+	}
+	return nil
 }
 
 // MockTimestamper provides deterministic responses for offline tests.

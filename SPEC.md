@@ -79,10 +79,20 @@ jq -r '.notarization.rfc3161_token_base64' .gitproof/proof.json | base64 -d > to
 # 2. Extract the overall Merkle root to binary
 jq -r '.repository.overall_merkle_root' .gitproof/proof.json | xxd -r -p > root.bin
 
-# 3. Verify against DigiCert / Sectigo public CA trust store
-openssl ts -verify -data root.bin -in token.tsr -CAfile /etc/ssl/cert.pem
+# 3. Verify against DigiCert / Sectigo public CA trust store at historical signing time (-attime)
+EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$(jq -r '.notarization.notarized_time' .gitproof/proof.json)" "+%s" 2>/dev/null || date -d "$(jq -r '.notarization.notarized_time' .gitproof/proof.json)" "+%s")
+openssl ts -verify -data root.bin -in token.tsr -CAfile /etc/ssl/cert.pem -attime "${EPOCH}"
 ```
 
 If OpenSSL outputs:
 `Verification: OK`
-the Merkle root existed at or before the notarized timestamp signed by the hardware security module (HSM) of the root CA. // CITED — IETF RFC 3161
+the Merkle root existed at or before the notarized timestamp signed by the hardware security module of the root CA. // CITED — IETF RFC 3161
+
+---
+
+## 5. Long-Term Validation (LTV) & Cryptographic Durability
+
+To ensure evidence remains admissible across decades of patent maintenance or post-acquisition indemnity periods: // CITED — FRE 902
+1. **Embedded Intermediate Chains (`CertReq=true`):** Tokens contain the full X.509 certificate path, avoiding external LDAP/HTTP CA lookups. // CITED — IETF RFC 3161
+2. **Point-in-Time X.509 Validation:** Verification sets `VerifyOptions.CurrentTime = TSTInfo.GenTime`, confirming certificate validity at the precise second of signing rather than current wall-clock time. // CITED — Go crypto/x509; IETF RFC 3161
+3. **RFC 4998 Archive Rollover (`gproof reseal`):** As cryptographic algorithms or root certificates approach obsolescence, GitProof wraps existing proofs in fresh timestamp envelopes, extending legal validity indefinitely without altering history. // CITED — IETF RFC 4998

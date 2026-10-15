@@ -49,6 +49,18 @@ Timestamp: <ISO8601-TIMESTAMP>
 🛡️ VERIFICATION SUCCESSFUL: Provenance and timestamp mathematically authenticated.
 ``` // CITED — IETF RFC 3161
 
+### Stock OpenSSL Fallback (-attime Point-in-Time LTV)
+Verify without installing any tool, evaluating certificate validity at the exact historical signing timestamp: // CITED — IETF RFC 3161
+```bash
+# Extract token and Merkle root
+jq -r '.notarization.rfc3161_token_base64' .gitproof/proof.json | base64 -d > token.tsr
+jq -r '.repository.overall_merkle_root' .gitproof/proof.json | xxd -r -p > root.bin
+
+# Verify against DigiCert / Sectigo public CA trust store at historical signing time (-attime)
+EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$(jq -r '.notarization.notarized_time' .gitproof/proof.json)" "+%s" 2>/dev/null || date -d "$(jq -r '.notarization.notarized_time' .gitproof/proof.json)" "+%s")
+openssl ts -verify -data root.bin -in token.tsr -CAfile /etc/ssl/cert.pem -attime "${EPOCH}"
+```
+
 ---
 
 ## 📜 Legal Evidence Admissibility (Federal Rules of Evidence) // CITED — FRE 902
