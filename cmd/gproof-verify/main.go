@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/legendrail/gitproof-verify/pkg/attestation"
 	"github.com/legendrail/gitproof-verify/pkg/gitenv"
@@ -85,10 +86,13 @@ func Run(args []string, stdout, stderr io.Writer, runner gitenv.GitRunner) int {
 			return 1
 		}
 		pubKey = pubKeyBytes
-	} else if record.Authorship.SigningKeyID != "" {
-		pubKeyBytes, err := hex.DecodeString(record.Authorship.SigningKeyID)
-		if err == nil && len(pubKeyBytes) == ed25519.PublicKeySize {
-			pubKey = pubKeyBytes
+	} else {
+		keyPath := filepath.Join(repoDir, ".gitproof", "key.pub")
+		if keyData, err := os.ReadFile(keyPath); err == nil {
+			pubKeyBytes, err := hex.DecodeString(strings.TrimSpace(string(keyData)))
+			if err == nil && len(pubKeyBytes) == ed25519.PublicKeySize {
+				pubKey = pubKeyBytes
+			}
 		}
 	}
 
